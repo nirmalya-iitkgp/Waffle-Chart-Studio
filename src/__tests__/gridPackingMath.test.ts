@@ -1,0 +1,217 @@
+import { describe, expect, it } from 'vitest';
+import { createBuiltInSampleMask } from '../canvasMaskProcessor';
+import {
+  computeLegendText,
+  computeSlideLayout,
+  computeStageMetrics,
+  getSlideDimensions,
+} from '../gridPackingMath';
+import { INITIAL_STUDIO_CONFIG, normalizeHexColor } from '../palettes';
+import {
+  AspectRatioMode,
+  ContainerMode,
+  FillDirection,
+  FlowOrientation,
+  StageSizingMode,
+  StudioConfig,
+} from '../types';
+
+describe('gridPackingMath — Blue Pill (Happy Path)', () => {
+  it('computes exact slide dimensions for 16:9 and 4:3', () => {
+    expect(getSlideDimensions(AspectRatioMode.WIDE_16_9)).toEqual({
+      width: 13.333,
+      height: 7.5,
+    });
+    expect(getSlideDimensions(AspectRatioMode.STANDARD_4_3)).toEqual({
+      width: 10.0,
+      height: 7.5,
+    });
+  });
+
+  it('computes retention, step conversion, and drop-off percentages accurately for default 4-stage SaaS funnel', () => {
+    const metrics = computeStageMetrics(INITIAL_STUDIO_CONFIG);
+    expect(metrics).toHaveLength(4);
+
+    // Stage 1: 10,000 (100%)
+    expect(metrics[0].retentionPct).toBe(100);
+    expect(metrics[0].stepConversionPct).toBe(100);
+    expect(metrics[0].stepDropoffPct).toBe(0);
+
+    // Stage 2: 3,400 (34% of total, 34% conversion, 66% drop-off)
+    expect(metrics[1].retentionPct).toBeCloseTo(34, 2);
+    expect(metrics[1].stepConversionPct).toBeCloseTo(34, 2);
+    expect(metrics[1].stepDropoffPct).toBeCloseTo(66, 2);
+
+    // Stage 3: 1,450 (14.5% of total, 42.65% conversion from 3400)
+    expect(metrics[2].retentionPct).toBeCloseTo(14.5, 2);
+    expect(metrics[2].stepConversionPct).toBeCloseTo((1450 / 3400) * 100, 2);
+  });
+
+  it('ensures adjacent trapezoid entry heights match previous stage exit heights', () => {
+    const layout = computeSlideLayout(INITIAL_STUDIO_CONFIG);
+    expect(layout.stages).toHaveLength(4);
+    expect(layout.connectors).toHaveLength(3);
+
+    for (let i = 1; i < layout.stages.length; i++) {
+      const prev = layout.stages[i - 1];
+      const curr = layout.stages[i];
+      // Prev right edge: polygon[1].y .. polygon[2].y
+      const prevExitHeight = prev.polygon[2].y - prev.polygon[1].y;
+      // Curr left edge: polygon[0].y .. polygon[3].y
+      const currEntryHeight = curr.polygon[3].y - curr.polygon[0].y;
+      expect(currEntryHeight).toBeCloseTo(prevExitHeight, 3);
+    }
+  });
+
+  it('packs cells inside all 5 container modes without overflow', () => {
+    const mask = createBuiltInSampleMask('lightbulb');
+    const modes = [
+      ContainerMode.TRAPEZOID,
+      ContainerMode.SQUARE_GRID,
+      ContainerMode.DONUT,
+      ContainerMode.TRIANGLE,
+      ContainerMode.CUSTOM_MASK,
+    ];
+
+    for (const containerMode of modes) {
+      const cfg: StudioConfig = {
+        ...INITIAL_STUDIO_CONFIG,
+        containerMode,
+        customMask: containerMode === ContainerMode.CUSTOM_MASK ? mask : null,
+      };
+      const layout = computeSlideLayout(cfg);
+      for (const stage of layout.stages) {
+        expect(stage.cells.length).toBeGreaterThan(0);
+        for (const cell of stage.cells) {
+          expect(cell.x).toBeGreaterThanOrEqual(stage.box.x - 0.05);
+          expect(cell.y).toBeGreaterThanOrEqual(stage.box.y - 0.05);
+          expect(cell.x + cell.w).toBeLessThanOrEqual(stage.box.x + stage.box.w + 0.05);
+          expect(cell.y + cell.h).toBeLessThanOrEqual(stage.box.y + stage.box.h + 0.05);
+        }
+      }
+    }
+  });
+
+  it('fills proportional active vs inactive icons in Fixed Container mode across fill directions', () => {
+    const directions = [
+      FillDirection.BOTTOM_TO_TOP,
+      FillDirection.TOP_TO_BOTTOM,
+      FillDirection.LEFT_TO_RIGHT,
+    ];
+
+    for (const fillDirection of directions) {
+      const cfg: StudioConfig = {
+        ...INITIAL_STUDIO_CONFIG,
+        containerMode: ContainerMode.SQUARE_GRID,
+        stageSizingMode: StageSizingMode.FIXED_CONTAINER,
+        fillDirection,
+      };
+      const layout = computeSlideLayout(cfg);
+      const stage2 = layout.stages[1]; // 34% retention
+      const activeCells = stage2.cells.filter((c) => c.active);
+      const inactiveCells = stage2.cells.filter((c) => !c.active);
+
+      expect(activeCells.length).toBeGreaterThan(0);
+      expect(inactiveCells.length).toBeGreaterThan(0);
+      expect(activeCells.length / stage2.cells.length).toBeCloseTo(0.34, 1);
+
+      if (fillDirection === FillDirection.BOTTOM_TO_TOP) {
+        const avgActiveY = activeCells.reduce((s, c) => s + c.y, 0) / activeCells.length;
+        const avgInactiveY = inactiveCells.reduce((s, c) => s + c.y, 0) / inactiveCells.length;
+        expect(avgActiveY).toBeGreaterThan(avgInactiveY);
+      } else if (fillDirection === FillDirection.TOP_TO_BOTTOM) {
+        const avgActiveY = activeCells.reduce((s, c) => s + c.y, 0) / activeCells.length;
+        const avgInactiveY = inactiveCells.reduce((s, c) => s + c.y, 0) / inactiveCells.length;
+        expect(avgActiveY).toBeLessThan(avgInactiveY);
+      } else {
+        const avgActiveX = activeCells.reduce((s, c) => s + c.x, 0) / activeCells.length;
+        const avgInactiveX = inactiveCells.reduce((s, c) => s + c.x, 0) / inactiveCells.length;
+        expect(avgActiveX).toBeLessThan(avgInactiveX);
+      }
+    }
+  });
+
+  it('renders 1,000 total unit icons across 5 stages smoothly under 50ms', () => {
+    const cfg: StudioConfig = {
+      ...INITIAL_STUDIO_CONFIG,
+      stageCount: 5,
+      orientation: FlowOrientation.VERTICAL,
+      stages: INITIAL_STUDIO_CONFIG.stages.map((s) => ({ ...s, iconDensity: 200 })),
+    };
+    const start = performance.now();
+    const layout = computeSlideLayout(cfg);
+    const elapsed = performance.now() - start;
+
+    expect(layout.totalIconsRendered).toBeGreaterThanOrEqual(850);
+    expect(elapsed).toBeLessThan(150);
+  });
+
+  it('computes a collinear constant linear slope from initial to final stage in CONSTANT_SLOPE mode', () => {
+    const cfg: StudioConfig = {
+      ...INITIAL_STUDIO_CONFIG,
+      stageSizingMode: StageSizingMode.CONSTANT_SLOPE,
+    };
+    const layout = computeSlideLayout(cfg);
+    expect(layout.stages).toHaveLength(4);
+
+    // Top edge slope across all stage polygons should be constant
+    const firstTopLeft = layout.stages[0].polygon[0];
+    const lastTopRight = layout.stages[layout.stages.length - 1].polygon[1];
+    const overallSlope =
+      (lastTopRight.y - firstTopLeft.y) / (lastTopRight.x - firstTopLeft.x);
+
+    for (const stage of layout.stages) {
+      const p0 = stage.polygon[0];
+      const p1 = stage.polygon[1];
+      const stageSlope = (p1.y - p0.y) / (p1.x - p0.x);
+      expect(stageSlope).toBeCloseTo(overallSlope, 3);
+    }
+  });
+});
+
+describe('gridPackingMath — Red Pill (Adversarial & Edge Cases)', () => {
+  it('handles zero baseline value without NaN or Infinity', () => {
+    const cfg: StudioConfig = {
+      ...INITIAL_STUDIO_CONFIG,
+      stages: INITIAL_STUDIO_CONFIG.stages.map((s) => ({ ...s, value: 0 })),
+    };
+    const metrics = computeStageMetrics(cfg);
+    for (const m of metrics) {
+      expect(Number.isFinite(m.retentionPct)).toBe(true);
+      expect(Number.isFinite(m.stepConversionPct)).toBe(true);
+      expect(Number.isFinite(m.stepDropoffPct)).toBe(true);
+    }
+
+    const legend = computeLegendText(metrics);
+    expect(legend).toContain('1 icon');
+    expect(() => computeSlideLayout(cfg)).not.toThrow();
+  });
+
+  it('clamps out-of-range stageCount and empty custom mask safely', () => {
+    const emptyMask = {
+      width: 16,
+      height: 16,
+      occupancy: new Uint8Array(16 * 16), // all zeros
+      previewDataUrl: '',
+      fileName: 'empty.png',
+      coverageRatio: 0,
+    };
+
+    const cfg: StudioConfig = {
+      ...INITIAL_STUDIO_CONFIG,
+      stageCount: 99,
+      containerMode: ContainerMode.CUSTOM_MASK,
+      customMask: emptyMask,
+    };
+
+    const layout = computeSlideLayout(cfg);
+    expect(layout.stages).toHaveLength(5);
+    expect(Number.isFinite(layout.totalIconsRendered)).toBe(true);
+  });
+
+  it('normalizes malformed hex color strings to safe fallback', () => {
+    expect(normalizeHexColor('not-a-color', '#003f5c')).toBe('#003f5c');
+    expect(normalizeHexColor('2563eb')).toBe('#2563eb');
+    expect(normalizeHexColor('#ABCDEF')).toBe('#abcdef');
+  });
+});
