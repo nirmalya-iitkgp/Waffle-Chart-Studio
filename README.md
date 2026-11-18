@@ -17,7 +17,7 @@
   - Adjustable icon sizing (`8–28 px`) and gap spacing (`0–12 px`).
 - **Level 2 — Macro Container Shape Control**:
   - `Funnel Trapezoid` (entry matches prior stage exit %, tapering cleanly to current stage %).
-  - `Square / Rectangle Grid`, `Donut / Ring Grid`, `Triangle / Pyramid`, and `Custom Silhouette PNG Mask` (128×128 pixel luminance/alpha occupancy sampler + built-in sample masks).
+  - `Square / Rectangle Grid`, `Parliament / Arc-Dot Chart` (concentric arc rows with per-stage arc length `30°–360°` and rotation `-180°–180°` in the Stages tab), `Triangle / Pyramid`, and `Custom Silhouette PNG Mask` (128×128 pixel luminance/alpha occupancy sampler + built-in sample masks).
   - `Bottom-to-Top`, `Top-to-Bottom`, and `Left-to-Right` fill ordering.
 - **Level 3 — Multi-Stage Funnel & Per-Stage Density**:
   - `1 to 5` stages pre-loaded with a realistic 4-stage B2B SaaS pipeline.

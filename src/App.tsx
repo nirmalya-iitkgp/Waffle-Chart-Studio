@@ -72,6 +72,13 @@ export default function App() {
     }));
   }, []);
 
+  const handleSyncAllArcs = useCallback((arcSweepDeg: number, arcRotationDeg: number) => {
+    setConfig((prev) => ({
+      ...prev,
+      stages: prev.stages.map((st) => ({ ...st, arcSweepDeg, arcRotationDeg })),
+    }));
+  }, []);
+
   const handleSelectPalette = useCallback((palette: PalettePreset) => {
     setConfig((prev) => ({
       ...prev,
@@ -195,6 +202,7 @@ export default function App() {
               onUpdateStage={handleUpdateStage}
               onUpdateStageByDropoff={handleUpdateStageByDropoff}
               onSyncAllDensities={handleSyncAllDensities}
+              onSyncAllArcs={handleSyncAllArcs}
               onSelectPalette={handleSelectPalette}
               onStageColorChange={handleStageColorChange}
             />

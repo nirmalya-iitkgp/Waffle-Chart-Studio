@@ -18,6 +18,7 @@ interface SidebarTabsProps {
   onUpdateStage: (index: number, patch: Partial<StudioConfig['stages'][number]>) => void;
   onUpdateStageByDropoff: (index: number, dropoffPct: number) => void;
   onSyncAllDensities: (density: number) => void;
+  onSyncAllArcs: (arcSweepDeg: number, arcRotationDeg: number) => void;
   onSelectPalette: (palette: PalettePreset) => void;
   onStageColorChange: (index: number, color: string) => void;
 }
@@ -41,6 +42,7 @@ export const SidebarTabs: React.FC<SidebarTabsProps> = ({
   onUpdateStage,
   onUpdateStageByDropoff,
   onSyncAllDensities,
+  onSyncAllArcs,
   onSelectPalette,
   onStageColorChange,
 }) => {
@@ -123,6 +125,7 @@ export const SidebarTabs: React.FC<SidebarTabsProps> = ({
             onUpdateStage={onUpdateStage}
             onUpdateStageByDropoff={onUpdateStageByDropoff}
             onSyncAllDensities={onSyncAllDensities}
+            onSyncAllArcs={onSyncAllArcs}
           />
         )}
 

@@ -1,7 +1,7 @@
 import React from 'react';
-import { Equal } from 'lucide-react';
+import { Equal, RotateCw } from 'lucide-react';
 import { computeStageMetrics, formatPercent } from '../../gridPackingMath';
-import { FunnelStage, StageSizingMode, StudioConfig } from '../../types';
+import { ContainerMode, FunnelStage, StageSizingMode, StudioConfig } from '../../types';
 
 interface StagesTabProps {
   config: StudioConfig;
@@ -13,6 +13,7 @@ interface StagesTabProps {
   onUpdateStage: (index: number, patch: Partial<FunnelStage>) => void;
   onUpdateStageByDropoff: (index: number, dropoffPct: number) => void;
   onSyncAllDensities: (density: number) => void;
+  onSyncAllArcs: (arcSweepDeg: number, arcRotationDeg: number) => void;
 }
 
 export const StagesTab: React.FC<StagesTabProps> = ({
@@ -25,8 +26,10 @@ export const StagesTab: React.FC<StagesTabProps> = ({
   onUpdateStage,
   onUpdateStageByDropoff,
   onSyncAllDensities,
+  onSyncAllArcs,
 }) => {
   const metricsList = computeStageMetrics(config);
+  const isParliamentArcMode = config.containerMode === ContainerMode.DONUT;
 
   return (
     <div className="space-y-5">
@@ -143,17 +146,35 @@ export const StagesTab: React.FC<StagesTabProps> = ({
 
       {/* Per-Stage Configuration List */}
       <div className="pt-4 border-t border-slate-200 space-y-3">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-2">
           <span className="text-xs font-semibold text-slate-700">Stage Data &amp; Icon Density</span>
-          <button
-            type="button"
-            onClick={() => onSyncAllDensities(metricsList[0]?.stage.iconDensity ?? 100)}
-            className="inline-flex items-center gap-1 text-xs font-medium text-slate-600 hover:text-slate-900 underline underline-offset-2"
-            title="Set all stages to match Stage 1 icon count"
-          >
-            <Equal className="w-3 h-3" />
-            <span>Uniform density</span>
-          </button>
+          <div className="flex items-center gap-3">
+            {isParliamentArcMode && (
+              <button
+                type="button"
+                onClick={() =>
+                  onSyncAllArcs(
+                    metricsList[0]?.stage.arcSweepDeg ?? 180,
+                    metricsList[0]?.stage.arcRotationDeg ?? 0,
+                  )
+                }
+                className="inline-flex items-center gap-1 text-xs font-medium text-slate-600 hover:text-slate-900 underline underline-offset-2"
+                title="Apply Stage 1 arc length & rotation to all stages"
+              >
+                <RotateCw className="w-3 h-3" />
+                <span>Sync arcs</span>
+              </button>
+            )}
+            <button
+              type="button"
+              onClick={() => onSyncAllDensities(metricsList[0]?.stage.iconDensity ?? 100)}
+              className="inline-flex items-center gap-1 text-xs font-medium text-slate-600 hover:text-slate-900 underline underline-offset-2"
+              title="Set all stages to match Stage 1 icon count"
+            >
+              <Equal className="w-3 h-3" />
+              <span>Uniform density</span>
+            </button>
+          </div>
         </div>
 
         <div className="divide-y divide-slate-200 border border-slate-200 rounded-lg bg-white">
@@ -278,6 +299,114 @@ export const StagesTab: React.FC<StagesTabProps> = ({
                     className="w-full h-1.5 bg-slate-200 rounded-lg cursor-pointer"
                   />
                 </div>
+
+                {/* Parliament / Arc-Dot Geometry Controls per Stage */}
+                {isParliamentArcMode && (
+                  <div className="pt-2.5 border-t border-slate-100 space-y-2.5">
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label
+                          htmlFor={`stage-arc-sweep-${index}`}
+                          className="text-[11px] font-medium text-slate-600"
+                        >
+                          Arc Length
+                        </label>
+                        <div className="flex items-center gap-1.5">
+                          <div className="inline-flex items-center gap-0.5">
+                            {[90, 180, 270, 360].map((presetDeg) => (
+                              <button
+                                key={presetDeg}
+                                type="button"
+                                onClick={() => onUpdateStage(index, { arcSweepDeg: presetDeg })}
+                                className={`px-1.5 py-0.5 text-[10px] font-mono rounded border transition-colors ${
+                                  stage.arcSweepDeg === presetDeg
+                                    ? 'bg-slate-900 text-white border-slate-900'
+                                    : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                                }`}
+                              >
+                                {presetDeg}°
+                              </button>
+                            ))}
+                          </div>
+                          <input
+                            id={`stage-arc-sweep-num-${index}`}
+                            type="number"
+                            min={30}
+                            max={360}
+                            step={5}
+                            aria-label={`Stage ${index + 1} arc length degrees`}
+                            value={stage.arcSweepDeg}
+                            onChange={(e) => {
+                              const val = Math.max(30, Math.min(360, Number(e.target.value) || 180));
+                              onUpdateStage(index, { arcSweepDeg: val });
+                            }}
+                            className="w-12 px-1.5 py-0.5 text-[11px] font-mono tabular-nums text-right text-slate-800 bg-slate-50 border border-slate-200 rounded focus:bg-white focus:border-slate-900 focus:outline-none"
+                          />
+                        </div>
+                      </div>
+                      <input
+                        id={`stage-arc-sweep-${index}`}
+                        type="range"
+                        min={30}
+                        max={360}
+                        step={5}
+                        aria-label={`Stage ${index + 1} arc length slider`}
+                        value={stage.arcSweepDeg}
+                        onChange={(e) =>
+                          onUpdateStage(index, { arcSweepDeg: Number(e.target.value) })
+                        }
+                        className="w-full h-1.5 bg-slate-200 rounded-lg cursor-pointer"
+                      />
+                    </div>
+
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <label
+                          htmlFor={`stage-arc-rot-${index}`}
+                          className="text-[11px] font-medium text-slate-600"
+                        >
+                          Arc Rotation
+                        </label>
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => onUpdateStage(index, { arcRotationDeg: 0 })}
+                            className="px-1.5 py-0.5 text-[10px] font-medium rounded border border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100"
+                          >
+                            Reset 0°
+                          </button>
+                          <input
+                            id={`stage-arc-rot-num-${index}`}
+                            type="number"
+                            min={-180}
+                            max={180}
+                            step={5}
+                            aria-label={`Stage ${index + 1} arc rotation degrees`}
+                            value={stage.arcRotationDeg}
+                            onChange={(e) => {
+                              const val = Math.max(-180, Math.min(180, Number(e.target.value) || 0));
+                              onUpdateStage(index, { arcRotationDeg: val });
+                            }}
+                            className="w-12 px-1.5 py-0.5 text-[11px] font-mono tabular-nums text-right text-slate-800 bg-slate-50 border border-slate-200 rounded focus:bg-white focus:border-slate-900 focus:outline-none"
+                          />
+                        </div>
+                      </div>
+                      <input
+                        id={`stage-arc-rot-${index}`}
+                        type="range"
+                        min={-180}
+                        max={180}
+                        step={5}
+                        aria-label={`Stage ${index + 1} arc rotation slider`}
+                        value={stage.arcRotationDeg}
+                        onChange={(e) =>
+                          onUpdateStage(index, { arcRotationDeg: Number(e.target.value) })
+                        }
+                        className="w-full h-1.5 bg-slate-200 rounded-lg cursor-pointer"
+                      />
+                    </div>
+                  </div>
+                )}
               </div>
             );
           })}

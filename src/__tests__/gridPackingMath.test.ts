@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { createBuiltInSampleMask } from '../canvasMaskProcessor';
 import {
+  buildArcSectorOutlinePoints,
+  buildArcSectorSvgPath,
   computeLegendText,
   computeSlideLayout,
   computeStageMetrics,
@@ -166,6 +168,33 @@ describe('gridPackingMath — Blue Pill (Happy Path)', () => {
       const stageSlope = (p1.y - p0.y) / (p1.x - p0.x);
       expect(stageSlope).toBeCloseTo(overallSlope, 3);
     }
+  });
+
+  it('packs exact Parliament / Arc-Dot counts respecting per-stage arcSweepDeg and arcRotationDeg', () => {
+    const cfg: StudioConfig = {
+      ...INITIAL_STUDIO_CONFIG,
+      containerMode: ContainerMode.DONUT,
+      stageCount: 2,
+      stages: [
+        { ...INITIAL_STUDIO_CONFIG.stages[0], iconDensity: 120, arcSweepDeg: 180, arcRotationDeg: 0 },
+        { ...INITIAL_STUDIO_CONFIG.stages[1], iconDensity: 85, arcSweepDeg: 270, arcRotationDeg: 90 },
+        ...INITIAL_STUDIO_CONFIG.stages.slice(2),
+      ],
+    };
+    const layout = computeSlideLayout(cfg);
+    expect(layout.stages[0].cells).toHaveLength(120);
+    expect(layout.stages[1].cells).toHaveLength(85);
+    expect(layout.stages[0].arcGeometry?.sweepDeg).toBe(180);
+    expect(layout.stages[1].arcGeometry?.sweepDeg).toBe(270);
+
+    // Rotated +90 deg shifts center angle to right (0 rad)
+    const s1Arc = layout.stages[1].arcGeometry!;
+    const midAngle = (s1Arc.startAngleRad + s1Arc.endAngleRad) / 2;
+    expect(midAngle).toBeCloseTo(0, 4);
+
+    // Path & outline helpers produce valid geometry
+    expect(buildArcSectorSvgPath(s1Arc, 100)).toContain('A ');
+    expect(buildArcSectorOutlinePoints(s1Arc).length).toBeGreaterThan(20);
   });
 });
 

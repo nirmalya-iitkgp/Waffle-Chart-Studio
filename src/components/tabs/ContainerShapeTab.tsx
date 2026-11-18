@@ -46,8 +46,8 @@ const CONTAINER_MODES: Array<{
   },
   {
     id: ContainerMode.DONUT,
-    title: 'Donut / Ring Grid',
-    description: 'Packs icons radially between inner & outer rings',
+    title: 'Parliament / Arc-Dot Chart',
+    description: 'Concentric arc rows with per-stage rotation & arc length',
     icon: <CircleDot className="w-4 h-4" />,
   },
   {

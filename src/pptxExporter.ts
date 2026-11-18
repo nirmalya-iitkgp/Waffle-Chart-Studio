@@ -1,6 +1,10 @@
 import PptxGenJS from 'pptxgenjs';
 import { renderCustomIconVariant, renderPersonIconPng } from './canvasMaskProcessor';
-import { formatCompactNumber, formatPercent } from './gridPackingMath';
+import {
+  buildArcSectorOutlinePoints,
+  formatCompactNumber,
+  formatPercent,
+} from './gridPackingMath';
 import { normalizeHexColor } from './palettes';
 import {
   AspectRatioMode,
@@ -231,9 +235,12 @@ export async function exportSlideToPptx(
     const stageColorNoHash = stripHash(stageHex);
     const inactiveNoHash = stripHash(inactiveHex);
 
-    // Optional Trapezoid / Container Border
+    // Optional Trapezoid / Container / Parliament Arc Border
     if (config.showTrapezoidBorder) {
-      const polyBounds = getRelativePolygonBounds(polygon);
+      const borderPoints = stageLayout.arcGeometry
+        ? buildArcSectorOutlinePoints(stageLayout.arcGeometry)
+        : polygon;
+      const polyBounds = getRelativePolygonBounds(borderPoints);
       slide.addShape('custGeom' as PptxGenJS.SHAPE_NAME, {
         x: polyBounds.x,
         y: polyBounds.y,

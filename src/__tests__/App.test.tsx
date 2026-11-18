@@ -45,9 +45,9 @@ describe('WaffleFlow Studio — Integration Tests', () => {
     await user.click(screen.getByRole('button', { name: 'Diamond' }));
     await user.click(screen.getByRole('button', { name: 'Outline Stroke' }));
 
-    // Switch to Container tab and select Donut / Ring Grid
+    // Switch to Container tab and select Parliament / Arc-Dot Chart
     await user.click(screen.getByRole('tab', { name: /Container/i }));
-    await user.click(screen.getByRole('button', { name: /Donut \/ Ring Grid/i }));
+    await user.click(screen.getByRole('button', { name: /Parliament \/ Arc-Dot Chart/i }));
 
     // Switch to Palettes tab and apply Corporate Emerald
     await user.click(screen.getByRole('tab', { name: /Palettes/i }));
@@ -105,5 +105,28 @@ describe('WaffleFlow Studio — Integration Tests', () => {
 
     expect(connectorPolygon?.getAttribute('stroke')).toBe('transparent');
     expect(connectorPolygon?.getAttribute('stroke-width')).toBe('0');
+  });
+
+  it('reveals per-stage Arc Length and Rotation controls in Stages tab for Parliament / Arc-Dot Chart', async () => {
+    const user = userEvent.setup();
+    const { container } = render(<App />);
+
+    await user.click(screen.getByRole('tab', { name: /Container/i }));
+    await user.click(screen.getByRole('button', { name: /Parliament \/ Arc-Dot Chart/i }));
+
+    // Annular sector border paths should render on the slide
+    expect(container.querySelectorAll('svg path').length).toBeGreaterThanOrEqual(4);
+
+    // Switch back to Stages tab and adjust Stage 1 arc length & rotation
+    await user.click(screen.getByRole('tab', { name: /Stages/i }));
+    const arcInput = screen.getByLabelText('Stage 1 arc length degrees') as HTMLInputElement;
+    const rotInput = screen.getByLabelText('Stage 1 arc rotation degrees') as HTMLInputElement;
+    expect(arcInput.value).toBe('180');
+    expect(rotInput.value).toBe('0');
+
+    fireEvent.change(arcInput, { target: { value: '270' } });
+    fireEvent.change(rotInput, { target: { value: '45' } });
+    expect(arcInput.value).toBe('270');
+    expect(rotInput.value).toBe('45');
   });
 });

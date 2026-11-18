@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import {
+  buildArcSectorSvgPath,
   formatCompactNumber,
   formatPercent,
   SVG_UNITS_PER_INCH,
@@ -185,15 +186,24 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
 
               return (
                 <g key={metrics.stage.id}>
-                  {/* Optional Trapezoid / Container Border */}
-                  {config.showTrapezoidBorder && (
-                    <polygon
-                      points={polyPts}
-                      fill="none"
-                      stroke={normalizeHexColor(config.trapezoidBorderColor, '#cbd5e1')}
-                      strokeWidth={1.4}
-                    />
-                  )}
+                  {/* Optional Trapezoid / Container / Parliament Arc Border */}
+                  {config.showTrapezoidBorder &&
+                    (stageLayout.arcGeometry ? (
+                      <path
+                        d={buildArcSectorSvgPath(stageLayout.arcGeometry, SVG_UNITS_PER_INCH)}
+                        fill="none"
+                        fillRule="evenodd"
+                        stroke={normalizeHexColor(config.trapezoidBorderColor, '#cbd5e1')}
+                        strokeWidth={1.4}
+                      />
+                    ) : (
+                      <polygon
+                        points={polyPts}
+                        fill="none"
+                        stroke={normalizeHexColor(config.trapezoidBorderColor, '#cbd5e1')}
+                        strokeWidth={1.4}
+                      />
+                    ))}
 
                   {/* Individual Unit Icons */}
                   {cells.map((cell, cellIdx) => {

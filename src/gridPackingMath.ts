@@ -1,4 +1,5 @@
 import {
+  ArcSectorGeometry,
   AspectRatioMode,
   ConnectorLayout,
   ContainerMode,
@@ -389,6 +390,210 @@ function packCellsInContainer(
 }
 
 /**
+ * Packs `targetDensity` icons into concentric Parliament / Arc-Dot rows
+ * spanning `arcSweepDeg` (30–360°) rotated by `arcRotationDeg` (-180–180°).
+ */
+function packParliamentArcCells(
+  box: { x: number; y: number; w: number; h: number },
+  targetDensity: number,
+  sweepDegRaw: number,
+  rotationDegRaw: number,
+  fillDirection: FillDirection,
+  iconSizePx: number,
+  gapSpacingPx: number,
+  activeRatio: number,
+): { cells: UnitCell[]; activeCount: number; arcGeometry: ArcSectorGeometry } {
+  const safeTarget = clamp(Math.round(targetDensity), 1, 400);
+  const sweepDeg = clamp(sweepDegRaw ?? 180, 30, 360);
+  const rotationDeg = clamp(rotationDegRaw ?? 0, -180, 180);
+
+  const innerRatio = 0.36;
+  const centerAngleRad = ((-90 + rotationDeg) * Math.PI) / 180;
+  const sweepRad = (sweepDeg * Math.PI) / 180;
+  const startAngleRad = centerAngleRad - sweepRad / 2;
+  const endAngleRad = centerAngleRad + sweepRad / 2;
+  const isFullCircle = sweepDeg >= 358;
+
+  // Compute tight normalized bounding box of the annular sector
+  let minNx = Infinity;
+  let maxNx = -Infinity;
+  let minNy = Infinity;
+  let maxNy = -Infinity;
+  const samples = 64;
+  for (let i = 0; i <= samples; i++) {
+    const theta = startAngleRad + (i / samples) * sweepRad;
+    const cos = Math.cos(theta);
+    const sin = Math.sin(theta);
+    for (const r of [innerRatio, 1]) {
+      const px = r * cos;
+      const py = r * sin;
+      if (px < minNx) minNx = px;
+      if (px > maxNx) maxNx = px;
+      if (py < minNy) minNy = py;
+      if (py > maxNy) maxNy = py;
+    }
+  }
+
+  const normW = Math.max(0.2, maxNx - minNx);
+  const normH = Math.max(0.2, maxNy - minNy);
+  const outerR = Math.min((box.w * 0.9) / normW, (box.h * 0.9) / normH);
+  const innerR = outerR * innerRatio;
+  const cx = box.x + box.w / 2 - ((minNx + maxNx) / 2) * outerR;
+  const cy = box.y + box.h / 2 - ((minNy + maxNy) / 2) * outerR;
+  const ringSpan = Math.max(0.05, outerR - innerR);
+
+  const computeRingPlan = (pitch: number): Array<{ r: number; count: number }> => {
+    const numRings = clamp(Math.round(ringSpan / Math.max(0.015, pitch)) + 1, 1, 24);
+    const plan: Array<{ r: number; count: number }> = [];
+    for (let k = 0; k < numRings; k++) {
+      const r =
+        numRings === 1 ? (innerR + outerR) / 2 : innerR + (k / (numRings - 1)) * ringSpan;
+      const arcLen = r * sweepRad;
+      const count = isFullCircle
+        ? Math.max(1, Math.round(arcLen / pitch))
+        : Math.max(1, Math.floor(arcLen / pitch) + 1);
+      plan.push({ r, count });
+    }
+    return plan;
+  };
+
+  let low = ringSpan / 32;
+  let high = outerR * 1.2;
+  let bestPlan = computeRingPlan((low + high) / 2);
+  let bestDiff = Math.abs(
+    bestPlan.reduce((s, item) => s + item.count, 0) - safeTarget,
+  );
+
+  for (let iter = 0; iter < 18; iter++) {
+    const mid = (low + high) / 2;
+    const plan = computeRingPlan(mid);
+    const total = plan.reduce((s, item) => s + item.count, 0);
+    const diff = Math.abs(total - safeTarget);
+
+    if (diff < bestDiff) {
+      bestDiff = diff;
+      bestPlan = plan;
+    }
+
+    if (total > safeTarget) {
+      low = mid;
+    } else if (total < safeTarget) {
+      high = mid;
+    } else {
+      break;
+    }
+  }
+
+  // Symmetrically balance ring counts so total equals safeTarget without lopsided gaps
+  let currentTotal = bestPlan.reduce((s, item) => s + item.count, 0);
+  while (currentTotal > safeTarget) {
+    let largestIdx = -1;
+    let largestVal = 1;
+    for (let k = bestPlan.length - 1; k >= 0; k--) {
+      if (bestPlan[k].count > largestVal) {
+        largestVal = bestPlan[k].count;
+        largestIdx = k;
+      }
+    }
+    if (largestIdx === -1) break;
+    bestPlan[largestIdx].count -= 1;
+    currentTotal -= 1;
+  }
+  while (currentTotal < safeTarget) {
+    let targetIdx = bestPlan.length - 1;
+    let maxRatio = -1;
+    for (let k = 0; k < bestPlan.length; k++) {
+      const ratio = bestPlan[k].r / Math.max(1, bestPlan[k].count);
+      if (ratio > maxRatio) {
+        maxRatio = ratio;
+        targetIdx = k;
+      }
+    }
+    bestPlan[targetIdx].count += 1;
+    currentTotal += 1;
+  }
+
+  // Compute safe non-overlapping icon dimension
+  const radialStep = bestPlan.length > 1 ? ringSpan / (bestPlan.length - 1) : ringSpan;
+  let minArcStep = radialStep;
+  for (const ring of bestPlan) {
+    if (ring.count > 1) {
+      const denom = isFullCircle ? ring.count : ring.count - 1;
+      const step = (ring.r * sweepRad) / denom;
+      if (step < minArcStep) minArcStep = step;
+    }
+  }
+  const cellPitch = Math.min(radialStep, minArcStep);
+  const gapFraction = clamp(gapSpacingPx / 26, 0.04, 0.48);
+  const sizeScale = clamp(iconSizePx / 16, 0.45, 1.35);
+  const iconDim = clamp(
+    cellPitch * (1 - gapFraction) * Math.min(1.06, sizeScale),
+    0.025,
+    cellPitch * 0.92,
+  );
+
+  // Materialize dot coordinates
+  const dots: Array<{ cx: number; cy: number; theta: number; r: number }> = [];
+  for (const ring of bestPlan) {
+    for (let j = 0; j < ring.count; j++) {
+      let theta: number;
+      if (isFullCircle) {
+        theta = startAngleRad + (j / ring.count) * sweepRad;
+      } else if (ring.count === 1) {
+        theta = centerAngleRad;
+      } else {
+        theta = startAngleRad + (j / (ring.count - 1)) * sweepRad;
+      }
+      dots.push({
+        cx: cx + ring.r * Math.cos(theta),
+        cy: cy + ring.r * Math.sin(theta),
+        theta,
+        r: ring.r,
+      });
+    }
+  }
+
+  // Order dots cleanly according to FillDirection
+  dots.sort((a, b) => {
+    const eps = 0.001;
+    if (fillDirection === FillDirection.BOTTOM_TO_TOP) {
+      if (Math.abs(b.cy - a.cy) > eps) return b.cy - a.cy;
+      return a.cx - b.cx;
+    }
+    if (fillDirection === FillDirection.TOP_TO_BOTTOM) {
+      if (Math.abs(a.cy - b.cy) > eps) return a.cy - b.cy;
+      return a.cx - b.cx;
+    }
+    // LEFT_TO_RIGHT -> angular Parliament wedge sweep
+    if (Math.abs(a.theta - b.theta) > eps) return a.theta - b.theta;
+    return a.r - b.r;
+  });
+
+  const activeCount = Math.round(dots.length * clamp(activeRatio, 0, 1));
+  const cells: UnitCell[] = dots.map((dot, idx) => ({
+    x: dot.cx - iconDim / 2,
+    y: dot.cy - iconDim / 2,
+    w: iconDim,
+    h: iconDim,
+    active: idx < activeCount,
+  }));
+
+  return {
+    cells,
+    activeCount,
+    arcGeometry: {
+      cx,
+      cy,
+      innerR,
+      outerR,
+      startAngleRad,
+      endAngleRad,
+      sweepDeg,
+    },
+  };
+}
+
+/**
  * Computes the complete deterministic slide layout in Slide Inches.
  */
 export function computeSlideLayout(config: StudioConfig): SlideLayoutResult {
@@ -462,7 +667,25 @@ export function computeSlideLayout(config: StudioConfig): SlideLayoutResult {
       const activeRatio = isTaperedTrapezoid ? 1 : m.retentionPct / 100;
       const includeGhost = isTaperedTrapezoid && config.showGhostDropoff;
 
-      const { cells, activeCellCount } = (() => {
+      let cells: UnitCell[];
+      let activeCellCount: number;
+      let arcGeometry: ArcSectorGeometry | undefined;
+
+      if (config.containerMode === ContainerMode.DONUT) {
+        const arcRes = packParliamentArcCells(
+          box,
+          m.stage.iconDensity,
+          m.stage.arcSweepDeg,
+          m.stage.arcRotationDeg,
+          config.fillDirection,
+          config.iconSizePx,
+          config.gapSpacingPx,
+          activeRatio,
+        );
+        cells = arcRes.cells;
+        activeCellCount = arcRes.activeCount;
+        arcGeometry = arcRes.arcGeometry;
+      } else {
         const res = packCellsInContainer(
           box,
           m.stage.iconDensity,
@@ -473,14 +696,16 @@ export function computeSlideLayout(config: StudioConfig): SlideLayoutResult {
           activeRatio,
           includeGhost,
         );
-        return { cells: res.cells, activeCellCount: res.activeCount };
-      })();
+        cells = res.cells;
+        activeCellCount = res.activeCount;
+      }
 
       totalIconsRendered += cells.length;
       stageLayouts.push({
         metrics: m,
         box,
         polygon,
+        arcGeometry,
         headerBox,
         cells,
         activeCellCount,
@@ -566,25 +791,48 @@ export function computeSlideLayout(config: StudioConfig): SlideLayoutResult {
       const activeRatio = isTaperedTrapezoid ? 1 : m.retentionPct / 100;
       const includeGhost = isTaperedTrapezoid && config.showGhostDropoff;
 
-      const res = packCellsInContainer(
-        box,
-        m.stage.iconDensity,
-        predicate,
-        config.fillDirection,
-        config.iconSizePx,
-        config.gapSpacingPx,
-        activeRatio,
-        includeGhost,
-      );
+      let cells: UnitCell[];
+      let activeCellCount: number;
+      let arcGeometry: ArcSectorGeometry | undefined;
 
-      totalIconsRendered += res.cells.length;
+      if (config.containerMode === ContainerMode.DONUT) {
+        const arcRes = packParliamentArcCells(
+          box,
+          m.stage.iconDensity,
+          m.stage.arcSweepDeg,
+          m.stage.arcRotationDeg,
+          config.fillDirection,
+          config.iconSizePx,
+          config.gapSpacingPx,
+          activeRatio,
+        );
+        cells = arcRes.cells;
+        activeCellCount = arcRes.activeCount;
+        arcGeometry = arcRes.arcGeometry;
+      } else {
+        const res = packCellsInContainer(
+          box,
+          m.stage.iconDensity,
+          predicate,
+          config.fillDirection,
+          config.iconSizePx,
+          config.gapSpacingPx,
+          activeRatio,
+          includeGhost,
+        );
+        cells = res.cells;
+        activeCellCount = res.activeCount;
+      }
+
+      totalIconsRendered += cells.length;
       stageLayouts.push({
         metrics: m,
         box,
         polygon,
+        arcGeometry,
         headerBox,
-        cells: res.cells,
-        activeCellCount: res.activeCount,
+        cells,
+        activeCellCount,
       });
     }
 
@@ -621,3 +869,68 @@ export function computeSlideLayout(config: StudioConfig): SlideLayoutResult {
     totalIconsRendered,
   };
 }
+
+/**
+ * Builds an SVG <path> d-string for an annular Parliament arc sector border.
+ */
+export function buildArcSectorSvgPath(arc: ArcSectorGeometry, scale: number): string {
+  const cx = arc.cx * scale;
+  const cy = arc.cy * scale;
+  const pad = Math.max(4, (arc.outerR - arc.innerR) * scale * 0.08);
+  const rOut = arc.outerR * scale + pad;
+  const rIn = Math.max(2, arc.innerR * scale - pad);
+
+  if (arc.sweepDeg >= 358) {
+    // Two concentric circles via two 180° arcs each
+    return [
+      `M ${(cx - rOut).toFixed(2)} ${cy.toFixed(2)}`,
+      `A ${rOut.toFixed(2)} ${rOut.toFixed(2)} 0 1 0 ${(cx + rOut).toFixed(2)} ${cy.toFixed(2)}`,
+      `A ${rOut.toFixed(2)} ${rOut.toFixed(2)} 0 1 0 ${(cx - rOut).toFixed(2)} ${cy.toFixed(2)} Z`,
+      `M ${(cx - rIn).toFixed(2)} ${cy.toFixed(2)}`,
+      `A ${rIn.toFixed(2)} ${rIn.toFixed(2)} 0 1 1 ${(cx + rIn).toFixed(2)} ${cy.toFixed(2)}`,
+      `A ${rIn.toFixed(2)} ${rIn.toFixed(2)} 0 1 1 ${(cx - rIn).toFixed(2)} ${cy.toFixed(2)} Z`,
+    ].join(' ');
+  }
+
+  const x1 = cx + rOut * Math.cos(arc.startAngleRad);
+  const y1 = cy + rOut * Math.sin(arc.startAngleRad);
+  const x2 = cx + rOut * Math.cos(arc.endAngleRad);
+  const y2 = cy + rOut * Math.sin(arc.endAngleRad);
+  const x3 = cx + rIn * Math.cos(arc.endAngleRad);
+  const y3 = cy + rIn * Math.sin(arc.endAngleRad);
+  const x4 = cx + rIn * Math.cos(arc.startAngleRad);
+  const y4 = cy + rIn * Math.sin(arc.startAngleRad);
+
+  const largeArc = arc.sweepDeg > 180 ? 1 : 0;
+
+  return [
+    `M ${x1.toFixed(2)} ${y1.toFixed(2)}`,
+    `A ${rOut.toFixed(2)} ${rOut.toFixed(2)} 0 ${largeArc} 1 ${x2.toFixed(2)} ${y2.toFixed(2)}`,
+    `L ${x3.toFixed(2)} ${y3.toFixed(2)}`,
+    `A ${rIn.toFixed(2)} ${rIn.toFixed(2)} 0 ${largeArc} 0 ${x4.toFixed(2)} ${y4.toFixed(2)}`,
+    'Z',
+  ].join(' ');
+}
+
+/**
+ * Samples polygon points (in slide inches) around an annular Parliament arc sector
+ * for native PowerPoint custGeom border export.
+ */
+export function buildArcSectorOutlinePoints(arc: ArcSectorGeometry): Point2D[] {
+  const pad = Math.max(0.04, (arc.outerR - arc.innerR) * 0.08);
+  const rOut = arc.outerR + pad;
+  const rIn = Math.max(0.02, arc.innerR - pad);
+  const steps = 28;
+  const pts: Point2D[] = [];
+
+  for (let i = 0; i <= steps; i++) {
+    const t = arc.startAngleRad + (i / steps) * (arc.endAngleRad - arc.startAngleRad);
+    pts.push({ x: arc.cx + rOut * Math.cos(t), y: arc.cy + rOut * Math.sin(t) });
+  }
+  for (let i = steps; i >= 0; i--) {
+    const t = arc.startAngleRad + (i / steps) * (arc.endAngleRad - arc.startAngleRad);
+    pts.push({ x: arc.cx + rIn * Math.cos(t), y: arc.cy + rIn * Math.sin(t) });
+  }
+  return pts;
+}
+

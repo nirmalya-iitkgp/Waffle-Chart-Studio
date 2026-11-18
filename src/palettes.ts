@@ -57,6 +57,8 @@ export const DEFAULT_SAAS_STAGES: FunnelStage[] = [
     value: 10000,
     iconDensity: 180,
     color: CORPORATE_PALETTES[0].colors[0],
+    arcSweepDeg: 180,
+    arcRotationDeg: 0,
   },
   {
     id: 'stage-2',
@@ -64,6 +66,8 @@ export const DEFAULT_SAAS_STAGES: FunnelStage[] = [
     value: 3400,
     iconDensity: 120,
     color: CORPORATE_PALETTES[0].colors[1],
+    arcSweepDeg: 180,
+    arcRotationDeg: 0,
   },
   {
     id: 'stage-3',
@@ -71,6 +75,8 @@ export const DEFAULT_SAAS_STAGES: FunnelStage[] = [
     value: 1450,
     iconDensity: 80,
     color: CORPORATE_PALETTES[0].colors[2],
+    arcSweepDeg: 180,
+    arcRotationDeg: 0,
   },
   {
     id: 'stage-4',
@@ -78,6 +84,8 @@ export const DEFAULT_SAAS_STAGES: FunnelStage[] = [
     value: 520,
     iconDensity: 45,
     color: CORPORATE_PALETTES[0].colors[3],
+    arcSweepDeg: 180,
+    arcRotationDeg: 0,
   },
   {
     id: 'stage-5',
@@ -85,6 +93,8 @@ export const DEFAULT_SAAS_STAGES: FunnelStage[] = [
     value: 180,
     iconDensity: 24,
     color: CORPORATE_PALETTES[0].colors[4],
+    arcSweepDeg: 180,
+    arcRotationDeg: 0,
   },
 ];
 

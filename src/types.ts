@@ -52,6 +52,10 @@ export interface FunnelStage {
   value: number;
   iconDensity: number;
   color: string;
+  /** Arc sweep angle in degrees (30–360) for Parliament / Arc-Dot mode */
+  arcSweepDeg: number;
+  /** Arc rotation offset in degrees (-180–180) for Parliament / Arc-Dot mode */
+  arcRotationDeg: number;
 }
 
 export interface PalettePreset {
@@ -102,12 +106,24 @@ export interface StageComputedMetrics {
   stepDropoffPct: number;
 }
 
+export interface ArcSectorGeometry {
+  cx: number;
+  cy: number;
+  innerR: number;
+  outerR: number;
+  startAngleRad: number;
+  endAngleRad: number;
+  sweepDeg: number;
+}
+
 export interface StageLayoutResult {
   metrics: StageComputedMetrics;
   /** Bounding box of the icon container in slide inches */
   box: { x: number; y: number; w: number; h: number };
   /** Exact 4-corner polygon for trapezoid border (or rectangle) in slide inches */
   polygon: Point2D[];
+  /** Optional annular sector geometry when in Parliament / Arc-Dot mode */
+  arcGeometry?: ArcSectorGeometry;
   /** Header text bounding box in slide inches */
   headerBox: { x: number; y: number; w: number; h: number };
   /** All packed unit cells in slide inches */
