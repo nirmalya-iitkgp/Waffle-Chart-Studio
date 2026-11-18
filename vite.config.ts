@@ -9,7 +9,7 @@ export default defineConfig(() => {
   const base = process.env.GITHUB_ACTIONS && repoName ? `/${repoName}/` : '/';
 
   return {
-    base,
+    base: '/Waffle-Chart-Studio/',
     plugins: [
       react(),
       tailwindcss(),
