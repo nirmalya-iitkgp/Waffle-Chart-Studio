@@ -1,3 +1,4 @@
+import { normalizeHexColor } from './palettes';
 import {
   ArcSectorGeometry,
   AspectRatioMode,
@@ -6,6 +7,7 @@ import {
   CustomMaskGrid,
   FillDirection,
   FlowOrientation,
+  FunnelStage,
   Point2D,
   SlideLayoutResult,
   StageComputedMetrics,
@@ -594,6 +596,61 @@ function packParliamentArcCells(
 }
 
 /**
+ * Computes normalized percentages (summing to 100) for a stage's color slices.
+ */
+export function computeSlicePercentages(stage: FunnelStage): number[] {
+  const slices = stage.colorSlices ?? [];
+  if (slices.length === 0) return [];
+  const weights = slices.map((s) => Math.max(0, Number.isFinite(s.share) ? s.share : 0));
+  const total = weights.reduce((a, b) => a + b, 0);
+  if (total <= 0) {
+    return slices.map(() => 100 / slices.length);
+  }
+  return weights.map((w) => (w / total) * 100);
+}
+
+/**
+ * Assigns per-cell custom colors across active cells using Hamilton largest-remainder
+ * allocation when stage.multiColorEnabled is active.
+ */
+function applyStageColorSlices(cells: UnitCell[], stage: FunnelStage): void {
+  if (!stage.multiColorEnabled || !stage.colorSlices || stage.colorSlices.length === 0) {
+    return;
+  }
+
+  const activeIndices: number[] = [];
+  for (let i = 0; i < cells.length; i++) {
+    if (cells[i].active) activeIndices.push(i);
+  }
+  const activeTotal = activeIndices.length;
+  if (activeTotal === 0) return;
+
+  const pcts = computeSlicePercentages(stage);
+  const exactCounts = pcts.map((pct) => (pct / 100) * activeTotal);
+  const counts = exactCounts.map((v) => Math.floor(v));
+  let remainder = activeTotal - counts.reduce((a, b) => a + b, 0);
+
+  const remainders = exactCounts
+    .map((v, idx) => ({ idx, frac: v - Math.floor(v) }))
+    .sort((a, b) => b.frac - a.frac);
+
+  for (let r = 0; r < remainders.length && remainder > 0; r++) {
+    counts[remainders[r].idx] += 1;
+    remainder -= 1;
+  }
+
+  let cursor = 0;
+  for (let sIdx = 0; sIdx < stage.colorSlices.length; sIdx++) {
+    const sliceColor = normalizeHexColor(stage.colorSlices[sIdx].color, stage.color);
+    const sliceCount = counts[sIdx];
+    for (let k = 0; k < sliceCount && cursor < activeTotal; k++) {
+      cells[activeIndices[cursor]].color = sliceColor;
+      cursor++;
+    }
+  }
+}
+
+/**
  * Computes the complete deterministic slide layout in Slide Inches.
  */
 export function computeSlideLayout(config: StudioConfig): SlideLayoutResult {
@@ -601,9 +658,12 @@ export function computeSlideLayout(config: StudioConfig): SlideLayoutResult {
   const metricsList = computeStageMetrics(config);
   const n = metricsList.length;
 
+  const hasMultiColorLegend = metricsList.some(
+    (m) => m.stage.multiColorEnabled && m.stage.colorSlices.length > 0,
+  );
   const marginX = 0.55;
   const topPlotY = 1.42;
-  const bottomMargin = 0.48;
+  const bottomMargin = hasMultiColorLegend ? 0.84 : 0.48;
   const plotW = slideWidth - marginX * 2;
   const plotH = slideHeight - topPlotY - bottomMargin;
 
@@ -699,6 +759,8 @@ export function computeSlideLayout(config: StudioConfig): SlideLayoutResult {
         cells = res.cells;
         activeCellCount = res.activeCount;
       }
+
+      applyStageColorSlices(cells, m.stage);
 
       totalIconsRendered += cells.length;
       stageLayouts.push({
@@ -823,6 +885,8 @@ export function computeSlideLayout(config: StudioConfig): SlideLayoutResult {
         cells = res.cells;
         activeCellCount = res.activeCount;
       }
+
+      applyStageColorSlices(cells, m.stage);
 
       totalIconsRendered += cells.length;
       stageLayouts.push({

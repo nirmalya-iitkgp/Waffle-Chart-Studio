@@ -50,6 +50,31 @@ export const CORPORATE_PALETTES: PalettePreset[] = [
   },
 ];
 
+export function createDefaultColorSlices(
+  paletteColors: readonly string[] = CORPORATE_PALETTES[0].colors,
+) {
+  return [
+    {
+      id: 'slice-1',
+      label: 'Segment A',
+      share: 45,
+      color: paletteColors[0] ?? '#003f5c',
+    },
+    {
+      id: 'slice-2',
+      label: 'Segment B',
+      share: 35,
+      color: paletteColors[1] ?? '#2f4b7c',
+    },
+    {
+      id: 'slice-3',
+      label: 'Segment C',
+      share: 20,
+      color: paletteColors[3] ?? '#a05195',
+    },
+  ];
+}
+
 export const DEFAULT_SAAS_STAGES: FunnelStage[] = [
   {
     id: 'stage-1',
@@ -59,6 +84,8 @@ export const DEFAULT_SAAS_STAGES: FunnelStage[] = [
     color: CORPORATE_PALETTES[0].colors[0],
     arcSweepDeg: 180,
     arcRotationDeg: 0,
+    multiColorEnabled: false,
+    colorSlices: createDefaultColorSlices(CORPORATE_PALETTES[0].colors),
   },
   {
     id: 'stage-2',
@@ -68,6 +95,8 @@ export const DEFAULT_SAAS_STAGES: FunnelStage[] = [
     color: CORPORATE_PALETTES[0].colors[1],
     arcSweepDeg: 180,
     arcRotationDeg: 0,
+    multiColorEnabled: false,
+    colorSlices: createDefaultColorSlices(CORPORATE_PALETTES[0].colors),
   },
   {
     id: 'stage-3',
@@ -77,6 +106,8 @@ export const DEFAULT_SAAS_STAGES: FunnelStage[] = [
     color: CORPORATE_PALETTES[0].colors[2],
     arcSweepDeg: 180,
     arcRotationDeg: 0,
+    multiColorEnabled: false,
+    colorSlices: createDefaultColorSlices(CORPORATE_PALETTES[0].colors),
   },
   {
     id: 'stage-4',
@@ -86,6 +117,8 @@ export const DEFAULT_SAAS_STAGES: FunnelStage[] = [
     color: CORPORATE_PALETTES[0].colors[3],
     arcSweepDeg: 180,
     arcRotationDeg: 0,
+    multiColorEnabled: false,
+    colorSlices: createDefaultColorSlices(CORPORATE_PALETTES[0].colors),
   },
   {
     id: 'stage-5',
@@ -95,6 +128,8 @@ export const DEFAULT_SAAS_STAGES: FunnelStage[] = [
     color: CORPORATE_PALETTES[0].colors[4],
     arcSweepDeg: 180,
     arcRotationDeg: 0,
+    multiColorEnabled: false,
+    colorSlices: createDefaultColorSlices(CORPORATE_PALETTES[0].colors),
   },
 ];
 

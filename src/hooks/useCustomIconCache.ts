@@ -28,7 +28,10 @@ export function useCustomIconCache(
   const activeStages = stages.slice(0, stageCount);
   const colorSignature = [
     normalizeHexColor(inactiveTint, '#e2e8f0'),
-    ...activeStages.map((s) => normalizeHexColor(s.color)),
+    ...activeStages.flatMap((s) => [
+      normalizeHexColor(s.color),
+      ...(s.multiColorEnabled ? s.colorSlices.map((sl) => normalizeHexColor(sl.color)) : []),
+    ]),
   ].join('|');
 
   useEffect(() => {

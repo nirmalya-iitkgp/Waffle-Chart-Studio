@@ -46,6 +46,13 @@ export enum StageSizingMode {
 
 export type SidebarTabId = 'unit-icon' | 'container-shape' | 'stages' | 'palettes';
 
+export interface StageColorSlice {
+  id: string;
+  label: string;
+  share: number;
+  color: string;
+}
+
 export interface FunnelStage {
   id: string;
   label: string;
@@ -56,6 +63,10 @@ export interface FunnelStage {
   arcSweepDeg: number;
   /** Arc rotation offset in degrees (-180–180) for Parliament / Arc-Dot mode */
   arcRotationDeg: number;
+  /** Enable multiple color segments inside this stage's macro container */
+  multiColorEnabled: boolean;
+  /** Ordered color breakdown slices used when multiColorEnabled is true */
+  colorSlices: StageColorSlice[];
 }
 
 export interface PalettePreset {
@@ -94,6 +105,7 @@ export interface UnitCell {
   w: number;
   h: number;
   active: boolean;
+  color?: string;
   isGhostOutsideTaper?: boolean;
 }
 

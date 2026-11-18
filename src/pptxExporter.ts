@@ -2,6 +2,7 @@ import PptxGenJS from 'pptxgenjs';
 import { renderCustomIconVariant, renderPersonIconPng } from './canvasMaskProcessor';
 import {
   buildArcSectorOutlinePoints,
+  computeSlicePercentages,
   formatCompactNumber,
   formatPercent,
 } from './gridPackingMath';
@@ -199,13 +200,23 @@ export async function exportSlideToPptx(
   const inactiveHex = normalizeHexColor(config.inactiveTint, '#e2e8f0');
   const stageIconDataCache = new Map<string, string>();
 
+  const collectStageColors = (): string[] => {
+    const colors: string[] = [inactiveHex];
+    for (const s of layout.stages) {
+      colors.push(normalizeHexColor(s.metrics.stage.color));
+      if (s.metrics.stage.multiColorEnabled) {
+        for (const sl of s.metrics.stage.colorSlices) {
+          colors.push(normalizeHexColor(sl.color, s.metrics.stage.color));
+        }
+      }
+    }
+    return Array.from(new Set(colors));
+  };
+
   if (config.iconPreset === UnitIconPreset.CUSTOM && config.customIcon) {
-    const uniqueColors = new Set<string>([
-      inactiveHex,
-      ...layout.stages.map((s) => normalizeHexColor(s.metrics.stage.color)),
-    ]);
+    const uniqueColors = collectStageColors();
     await Promise.all(
-      Array.from(uniqueColors).map(async (hex) => {
+      uniqueColors.map(async (hex) => {
         const dataUrl = await renderCustomIconVariant(
           config.customIcon!.sourceDataUrl,
           hex,
@@ -216,10 +227,7 @@ export async function exportSlideToPptx(
       }),
     );
   } else if (config.iconPreset === UnitIconPreset.PERSON) {
-    const uniqueColors = new Set<string>([
-      inactiveHex,
-      ...layout.stages.map((s) => normalizeHexColor(s.metrics.stage.color)),
-    ]);
+    const uniqueColors = collectStageColors();
     for (const hex of uniqueColors) {
       stageIconDataCache.set(hex, renderPersonIconPng(hex, config.renderStyle, 96));
     }
@@ -254,8 +262,8 @@ export async function exportSlideToPptx(
 
     // Individual Unit Icons
     for (const cell of cells) {
-      const colorHex = cell.active ? stageHex : inactiveHex;
-      const colorNoHash = cell.active ? stageColorNoHash : inactiveNoHash;
+      const colorHex = cell.color ?? (cell.active ? stageHex : inactiveHex);
+      const colorNoHash = stripHash(colorHex);
 
       if (nativeShape) {
         const isOutline = config.renderStyle === RenderStyle.OUTLINE;
@@ -332,6 +340,78 @@ export async function exportSlideToPptx(
         });
       }
     }
+  }
+
+  // 5. Multi-Color Segment Legend Strip
+  const multiColorStages = layout.stages.filter(
+    (s) => s.metrics.stage.multiColorEnabled && s.metrics.stage.colorSlices.length > 0,
+  );
+  if (multiColorStages.length > 0) {
+    const showPrefix = multiColorStages.length > 1;
+    const entries = multiColorStages.flatMap((s) => {
+      const pcts = computeSlicePercentages(s.metrics.stage);
+      return s.metrics.stage.colorSlices.map((sl, sIdx) => ({
+        colorNoHash: stripHash(normalizeHexColor(sl.color, s.metrics.stage.color)),
+        labelText: showPrefix
+          ? `${s.metrics.stage.label}: ${sl.label} (${Math.round(pcts[sIdx] ?? 0)}%)`
+          : `${sl.label} (${Math.round(pcts[sIdx] ?? 0)}%)`,
+      }));
+    });
+
+    const maxRowW = slideW - 1.1;
+    const gapX = 0.2;
+    const rows: Array<Array<{ colorNoHash: string; labelText: string; w: number }>> = [[]];
+    let currW = 0;
+    for (const entry of entries) {
+      const w = 0.18 + Math.max(0.45, entry.labelText.length * 0.068);
+      if (rows[rows.length - 1].length > 0 && currW + gapX + w > maxRowW) {
+        rows.push([{ ...entry, w }]);
+        currW = w;
+      } else {
+        rows[rows.length - 1].push({ ...entry, w });
+        currW += (rows[rows.length - 1].length > 1 ? gapX : 0) + w;
+      }
+    }
+
+    const slideH = layout.slideHeight;
+    slide.addShape(pptx.ShapeType.line, {
+      x: 0.55,
+      y: slideH - 0.6,
+      w: slideW - 1.1,
+      h: 0,
+      line: { color: 'E2E8F0', width: 0.6 },
+    });
+
+    const startY = rows.length > 1 ? slideH - 0.52 : slideH - 0.38;
+    rows.forEach((row, rIdx) => {
+      const rowTotalW = row.reduce((acc, item) => acc + item.w, 0) + Math.max(0, row.length - 1) * gapX;
+      let cursorX = Math.max(0.55, (slideW - rowTotalW) / 2);
+      const y = startY + rIdx * 0.2;
+      for (const item of row) {
+        slide.addShape(pptx.ShapeType.roundRect, {
+          x: cursorX,
+          y: y + 0.03,
+          w: 0.11,
+          h: 0.11,
+          rectRadius: 0.2,
+          fill: { color: item.colorNoHash },
+          line: { color: item.colorNoHash, width: 0 },
+        });
+        slide.addText(item.labelText, {
+          x: cursorX + 0.15,
+          y,
+          w: item.w - 0.15,
+          h: 0.17,
+          fontFace,
+          fontSize: 8.5,
+          bold: true,
+          color: '334155',
+          valign: 'middle',
+          margin: 0,
+        });
+        cursorX += item.w + gapX;
+      }
+    });
   }
 
   const safeSlug = (config.slideTitle || 'waffleflow-funnel')

@@ -24,6 +24,7 @@
   - Direct editing of either stage absolute value or `% decrease` (step drop-off) from the preceding stage.
   - Independent per-stage icon density (`10–400` icons per stage) with 1-click uniform sync.
   - `Trapezoid`, `Constant Slope` (linear taper from initial to final stage), and `Uniform` sizing modes, optional ghost drop-off units, and transition connectors with optional transparent outlines.
+  - **Multi-Color Container Segments**: Per-stage toggle to split active unit icons across 2–6 custom color segments with editable labels, hex colors, proportional share weights (Hamilton rounding), Equal Split action, and automatic bottom legend in SVG, PNG, and native PPTX exports.
 - **Executive Styling & Native PPTX Export**:
   - 6 curated corporate palettes (*Consulting Blues*, *Corporate Emerald*, *Terracotta & Slate*, *Monochrome Executive*, *Vibrant Product*, *Colorblind-Safe Viridis*) plus per-stage hex pickers.
   - `16:9 Widescreen` (`13.33" × 7.5"`) and `4:3 Standard` (`10" × 7.5"`) slides in `Horizontal` or `Vertical` flow.

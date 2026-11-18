@@ -86,6 +86,10 @@ export default function App() {
       stages: prev.stages.map((st, idx) => ({
         ...st,
         color: palette.colors[idx % palette.colors.length],
+        colorSlices: st.colorSlices.map((sl, sIdx) => ({
+          ...sl,
+          color: palette.colors[sIdx % palette.colors.length],
+        })),
       })),
     }));
   }, []);

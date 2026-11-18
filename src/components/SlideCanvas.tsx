@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import {
   buildArcSectorSvgPath,
+  computeSlicePercentages,
   formatCompactNumber,
   formatPercent,
   SVG_UNITS_PER_INCH,
@@ -38,6 +39,66 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
   const inactiveHex = normalizeHexColor(config.inactiveTint, '#e2e8f0');
 
   const isWide = config.aspectRatio === AspectRatioMode.WIDE_16_9;
+
+  const multiColorStages = layout.stages.filter(
+    (s) => s.metrics.stage.multiColorEnabled && s.metrics.stage.colorSlices.length > 0,
+  );
+  const showMultipleStagePrefixes = multiColorStages.length > 1;
+  const legendEntries = multiColorStages.flatMap((s) => {
+    const pcts = computeSlicePercentages(s.metrics.stage);
+    return s.metrics.stage.colorSlices.map((slice, sIdx) => {
+      const pctText = `${Math.round(pcts[sIdx] ?? 0)}%`;
+      const labelText = showMultipleStagePrefixes
+        ? `${s.metrics.stage.label}: ${slice.label} (${pctText})`
+        : `${slice.label} (${pctText})`;
+      return {
+        key: `${s.metrics.stage.id}-${slice.id}`,
+        color: normalizeHexColor(slice.color, s.metrics.stage.color),
+        labelText,
+      };
+    });
+  });
+
+  // Compute single/two-row centered horizontal positions for SVG segment legend
+  const legendMaxW = viewBoxW - 110;
+  const legendPositioned: Array<{
+    key: string;
+    color: string;
+    labelText: string;
+    x: number;
+    y: number;
+  }> = [];
+  if (legendEntries.length > 0) {
+    const gapX = 20;
+    const itemWidths = legendEntries.map((e) => 18 + Math.max(40, e.labelText.length * 6.8));
+    const rows: Array<Array<{ entry: (typeof legendEntries)[number]; w: number }>> = [[]];
+    let currRowW = 0;
+    legendEntries.forEach((entry, idx) => {
+      const w = itemWidths[idx];
+      if (rows[rows.length - 1].length > 0 && currRowW + gapX + w > legendMaxW) {
+        rows.push([{ entry, w }]);
+        currRowW = w;
+      } else {
+        rows[rows.length - 1].push({ entry, w });
+        currRowW += (rows[rows.length - 1].length > 1 ? gapX : 0) + w;
+      }
+    });
+    const baseLegendY = rows.length > 1 ? viewBoxH - 44 : viewBoxH - 28;
+    rows.forEach((row, rIdx) => {
+      const rowTotalW =
+        row.reduce((sum, item) => sum + item.w, 0) + Math.max(0, row.length - 1) * gapX;
+      let cursorX = Math.max(55, (viewBoxW - rowTotalW) / 2);
+      const rowY = baseLegendY + rIdx * 18;
+      row.forEach(({ entry, w }) => {
+        legendPositioned.push({
+          ...entry,
+          x: cursorX,
+          y: rowY,
+        });
+        cursorX += w + gapX;
+      });
+    });
+  }
 
   return (
     <main className="flex-1 bg-slate-100 flex flex-col items-center justify-center p-4 sm:p-6 lg:p-8 overflow-auto min-w-0">
@@ -207,7 +268,7 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
 
                   {/* Individual Unit Icons */}
                   {cells.map((cell, cellIdx) => {
-                    const color = cell.active ? stageHex : inactiveHex;
+                    const color = cell.color ?? (cell.active ? stageHex : inactiveHex);
                     const customImgUrl = customIconVariants[color];
                     return (
                       <UnitIconSvg
@@ -257,6 +318,42 @@ export const SlideCanvas: React.FC<SlideCanvasProps> = ({
                 </g>
               );
             })}
+
+            {/* Multi-Color Segment Legend Strip */}
+            {legendPositioned.length > 0 && (
+              <g aria-label="Color segment legend">
+                <line
+                  x1={55}
+                  y1={viewBoxH - 60}
+                  x2={viewBoxW - 55}
+                  y2={viewBoxH - 60}
+                  stroke="#e2e8f0"
+                  strokeWidth={1}
+                />
+                {legendPositioned.map((item) => (
+                  <g key={item.key}>
+                    <rect
+                      x={item.x}
+                      y={item.y - 10}
+                      width={11}
+                      height={11}
+                      rx={2.5}
+                      fill={item.color}
+                    />
+                    <text
+                      x={item.x + 16}
+                      y={item.y - 1}
+                      fill="#334155"
+                      fontSize={11}
+                      fontWeight={600}
+                      fontFamily="'DM Sans', Arial, sans-serif"
+                    >
+                      {item.labelText}
+                    </text>
+                  </g>
+                ))}
+              </g>
+            )}
           </svg>
 
           {/* Seamless Inline Editable Overlay Inputs for Slide Title & Subtitle */}

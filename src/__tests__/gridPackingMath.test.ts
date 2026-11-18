@@ -4,6 +4,7 @@ import {
   buildArcSectorOutlinePoints,
   buildArcSectorSvgPath,
   computeLegendText,
+  computeSlicePercentages,
   computeSlideLayout,
   computeStageMetrics,
   getSlideDimensions,
@@ -196,6 +197,68 @@ describe('gridPackingMath — Blue Pill (Happy Path)', () => {
     expect(buildArcSectorSvgPath(s1Arc, 100)).toContain('A ');
     expect(buildArcSectorOutlinePoints(s1Arc).length).toBeGreaterThan(20);
   });
+
+  it('allocates exact proportional colors across active cells when multiColorEnabled is true', () => {
+    const cfg: StudioConfig = {
+      ...INITIAL_STUDIO_CONFIG,
+      containerMode: ContainerMode.SQUARE_GRID,
+      stageSizingMode: StageSizingMode.FIXED_CONTAINER,
+      stageCount: 2,
+      stages: [
+        {
+          ...INITIAL_STUDIO_CONFIG.stages[0],
+          iconDensity: 100,
+          multiColorEnabled: true,
+          colorSlices: [
+            { id: 's1', label: 'Organic', share: 50, color: '#2563eb' },
+            { id: 's2', label: 'Paid', share: 30, color: '#16a34a' },
+            { id: 's3', label: 'Referral', share: 20, color: '#ea580c' },
+          ],
+        },
+        {
+          ...INITIAL_STUDIO_CONFIG.stages[1],
+          value: 5000, // 50% retention -> 50 active, 50 inactive
+          iconDensity: 100,
+          multiColorEnabled: true,
+          colorSlices: [
+            { id: 's1', label: 'Direct', share: 60, color: '#111111' },
+            { id: 's2', label: 'Partner', share: 40, color: '#222222' },
+          ],
+        },
+        ...INITIAL_STUDIO_CONFIG.stages.slice(2),
+      ],
+    };
+
+    const layout = computeSlideLayout(cfg);
+    const s0 = layout.stages[0];
+    const s0Cells = s0.cells;
+    const cBlue = s0Cells.filter((c) => c.color === '#2563eb').length;
+    const cGreen = s0Cells.filter((c) => c.color === '#16a34a').length;
+    const cOrange = s0Cells.filter((c) => c.color === '#ea580c').length;
+    expect(cBlue + cGreen + cOrange).toBe(s0.activeCellCount);
+    expect(cBlue / s0.activeCellCount).toBeCloseTo(0.5, 1);
+    expect(cGreen / s0.activeCellCount).toBeCloseTo(0.3, 1);
+    expect(cOrange / s0.activeCellCount).toBeCloseTo(0.2, 1);
+
+    // Stage 2 has inactive cells whose color should remain undefined (rendered with inactiveTint)
+    const s1Cells = layout.stages[1].cells;
+    const activeS1 = s1Cells.filter((c) => c.active);
+    const inactiveS1 = s1Cells.filter((c) => !c.active);
+    expect(activeS1.filter((c) => c.color === '#111111')).toHaveLength(
+      Math.round(activeS1.length * 0.6),
+    );
+    expect(activeS1.filter((c) => c.color === '#222222')).toHaveLength(
+      activeS1.length - Math.round(activeS1.length * 0.6),
+    );
+    expect(inactiveS1.every((c) => c.color === undefined)).toBe(true);
+
+    // Parliament / Arc-Dot packs exact iconDensity=100 cells -> exact 50/30/20 split
+    const arcLayout = computeSlideLayout({ ...cfg, containerMode: ContainerMode.DONUT });
+    const arcCells = arcLayout.stages[0].cells;
+    expect(arcCells.filter((c) => c.color === '#2563eb')).toHaveLength(50);
+    expect(arcCells.filter((c) => c.color === '#16a34a')).toHaveLength(30);
+    expect(arcCells.filter((c) => c.color === '#ea580c')).toHaveLength(20);
+  });
 });
 
 describe('gridPackingMath — Red Pill (Adversarial & Edge Cases)', () => {
@@ -242,5 +305,18 @@ describe('gridPackingMath — Red Pill (Adversarial & Edge Cases)', () => {
     expect(normalizeHexColor('not-a-color', '#003f5c')).toBe('#003f5c');
     expect(normalizeHexColor('2563eb')).toBe('#2563eb');
     expect(normalizeHexColor('#ABCDEF')).toBe('#abcdef');
+  });
+
+  it('falls back to equal split when all color slice weights are zero', () => {
+    const stage = {
+      ...INITIAL_STUDIO_CONFIG.stages[0],
+      multiColorEnabled: true,
+      colorSlices: [
+        { id: 'a', label: 'A', share: 0, color: '#111111' },
+        { id: 'b', label: 'B', share: -5, color: '#222222' },
+      ],
+    };
+    const pcts = computeSlicePercentages(stage);
+    expect(pcts).toEqual([50, 50]);
   });
 });

@@ -1,6 +1,11 @@
 import React from 'react';
-import { Equal, RotateCw } from 'lucide-react';
-import { computeStageMetrics, formatPercent } from '../../gridPackingMath';
+import { Equal, Plus, RotateCw, Trash2 } from 'lucide-react';
+import {
+  computeSlicePercentages,
+  computeStageMetrics,
+  formatPercent,
+} from '../../gridPackingMath';
+import { CORPORATE_PALETTES } from '../../palettes';
 import { ContainerMode, FunnelStage, StageSizingMode, StudioConfig } from '../../types';
 
 interface StagesTabProps {
@@ -407,6 +412,152 @@ export const StagesTab: React.FC<StagesTabProps> = ({
                     </div>
                   </div>
                 )}
+
+                {/* Multi-Color Container Segments Controls per Stage */}
+                <div className="pt-2.5 border-t border-slate-100 space-y-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <label
+                      htmlFor={`stage-multicolor-${index}`}
+                      className="text-[11px] font-medium text-slate-700 cursor-pointer"
+                    >
+                      Multi-Color Container Segments
+                    </label>
+                    <input
+                      id={`stage-multicolor-${index}`}
+                      type="checkbox"
+                      aria-label={`Stage ${index + 1} multi-color segments`}
+                      checked={stage.multiColorEnabled}
+                      onChange={(e) =>
+                        onUpdateStage(index, { multiColorEnabled: e.target.checked })
+                      }
+                      className="w-4 h-4 rounded border-slate-300 text-[#003f5c] focus:ring-slate-900 cursor-pointer"
+                    />
+                  </div>
+
+                  {stage.multiColorEnabled && (() => {
+                    const pcts = computeSlicePercentages(stage);
+                    const paletteColors =
+                      CORPORATE_PALETTES.find((p) => p.id === config.activePaletteId)?.colors ??
+                      CORPORATE_PALETTES[0].colors;
+
+                    return (
+                      <div className="space-y-2 pt-1">
+                        <div className="flex items-center justify-between text-[11px] text-slate-500">
+                          <span>Split active icons by color</span>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const equalShare = Number(
+                                (100 / Math.max(1, stage.colorSlices.length)).toFixed(1),
+                              );
+                              onUpdateStage(index, {
+                                colorSlices: stage.colorSlices.map((sl) => ({
+                                  ...sl,
+                                  share: equalShare,
+                                })),
+                              });
+                            }}
+                            className="font-medium text-slate-600 hover:text-slate-900 underline underline-offset-2"
+                          >
+                            Equal split
+                          </button>
+                        </div>
+
+                        <div className="space-y-1.5">
+                          {stage.colorSlices.map((slice, sIdx) => (
+                            <div
+                              key={slice.id}
+                              className="flex items-center gap-1.5"
+                            >
+                              <input
+                                type="color"
+                                value={slice.color}
+                                aria-label={`Stage ${index + 1} segment ${sIdx + 1} color`}
+                                onChange={(e) => {
+                                  const next = stage.colorSlices.map((sl, i) =>
+                                    i === sIdx ? { ...sl, color: e.target.value } : sl,
+                                  );
+                                  onUpdateStage(index, { colorSlices: next });
+                                }}
+                                className="w-6 h-6 rounded border border-slate-200 cursor-pointer shrink-0 p-0 bg-transparent"
+                              />
+                              <input
+                                type="text"
+                                value={slice.label}
+                                aria-label={`Stage ${index + 1} segment ${sIdx + 1} label`}
+                                onChange={(e) => {
+                                  const next = stage.colorSlices.map((sl, i) =>
+                                    i === sIdx ? { ...sl, label: e.target.value } : sl,
+                                  );
+                                  onUpdateStage(index, { colorSlices: next });
+                                }}
+                                className="flex-1 min-w-0 px-2 py-1 text-[11px] text-slate-800 bg-slate-50 border border-slate-200 rounded focus:bg-white focus:border-slate-900 focus:outline-none"
+                              />
+                              <input
+                                type="number"
+                                min={0}
+                                step={1}
+                                value={slice.share}
+                                aria-label={`Stage ${index + 1} segment ${sIdx + 1} share`}
+                                onChange={(e) => {
+                                  const val = Math.max(0, Number(e.target.value) || 0);
+                                  const next = stage.colorSlices.map((sl, i) =>
+                                    i === sIdx ? { ...sl, share: val } : sl,
+                                  );
+                                  onUpdateStage(index, { colorSlices: next });
+                                }}
+                                className="w-12 px-1.5 py-1 text-[11px] font-mono tabular-nums text-right text-slate-800 bg-slate-50 border border-slate-200 rounded focus:bg-white focus:border-slate-900 focus:outline-none shrink-0"
+                              />
+                              <span className="w-9 text-right font-mono text-[10px] text-slate-500 tabular-nums shrink-0">
+                                {Math.round(pcts[sIdx] ?? 0)}%
+                              </span>
+                              <button
+                                type="button"
+                                disabled={stage.colorSlices.length <= 2}
+                                aria-label={`Remove stage ${index + 1} segment ${sIdx + 1}`}
+                                onClick={() => {
+                                  if (stage.colorSlices.length <= 2) return;
+                                  onUpdateStage(index, {
+                                    colorSlices: stage.colorSlices.filter((_, i) => i !== sIdx),
+                                  });
+                                }}
+                                className="p-1 text-slate-400 hover:text-red-600 disabled:opacity-30 disabled:pointer-events-none shrink-0"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+
+                        {stage.colorSlices.length < 6 && (
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const nextIdx = stage.colorSlices.length;
+                              const nextLetter = String.fromCharCode(65 + nextIdx);
+                              const nextColor = paletteColors[nextIdx % paletteColors.length];
+                              onUpdateStage(index, {
+                                colorSlices: [
+                                  ...stage.colorSlices,
+                                  {
+                                    id: `slice-${Date.now()}-${nextIdx}`,
+                                    label: `Segment ${nextLetter}`,
+                                    share: 20,
+                                    color: nextColor,
+                                  },
+                                ],
+                              });
+                            }}
+                            className="inline-flex items-center gap-1 text-[11px] font-medium text-[#003f5c] hover:text-slate-900"
+                          >
+                            <Plus className="w-3 h-3" />
+                            <span>Add Color Segment</span>
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })()}
+                </div>
               </div>
             );
           })}

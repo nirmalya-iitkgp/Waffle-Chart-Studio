@@ -129,4 +129,33 @@ describe('WaffleFlow Studio — Integration Tests', () => {
     expect(arcInput.value).toBe('270');
     expect(rotInput.value).toBe('45');
   });
+
+  it('allows enabling Multi-Color Container Segments on a stage and renders multiple icon colors and legend', async () => {
+    const user = userEvent.setup();
+    const { container } = render(<App />);
+
+    const toggle = screen.getByLabelText('Stage 1 multi-color segments');
+    await user.click(toggle);
+
+    // Segment legend renders on the SVG canvas
+    const legendGroup = container.querySelector('svg g[aria-label="Color segment legend"]');
+    expect(legendGroup).not.toBeNull();
+    expect(legendGroup?.textContent).toContain('Segment A (45%)');
+    expect(legendGroup?.textContent).toContain('Segment B (35%)');
+    expect(legendGroup?.textContent).toContain('Segment C (20%)');
+
+    // Stage 1 icons inside the SVG should now have multiple distinct fill colors
+    const stage1Group = container.querySelector('svg > g:nth-of-type(5)');
+    const fills = new Set(
+      Array.from(stage1Group?.querySelectorAll('rect, path, circle, polygon') ?? [])
+        .map((el) => el.getAttribute('fill'))
+        .filter((f) => f && f !== 'none'),
+    );
+    expect(fills.size).toBeGreaterThanOrEqual(3);
+
+    // Add a 4th color segment and click Equal split
+    await user.click(screen.getByRole('button', { name: /Add Color Segment/i }));
+    await user.click(screen.getByRole('button', { name: /Equal split/i }));
+    expect(legendGroup?.textContent).toContain('Segment D (25%)');
+  });
 });
